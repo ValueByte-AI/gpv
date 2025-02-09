@@ -43,7 +43,7 @@ def get_score(valence_vec):
     return valence_vec[0] - valence_vec[1]
 
 
-def gen_queries_for_perception_retrieval(values: list[str], measurement_subject: str, model_name: str="Qwen1.5-110B-Chat"):
+def gen_queries_for_perception_retrieval(values: list[str], measurement_subject: str, model_name: str):
     """
     Generate queries via LLM for perception retrieval.
     """

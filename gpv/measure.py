@@ -143,6 +143,9 @@ class GPV:
     def parse_texts(self, texts: list[str]):
         if self.parser is None:
             self.parser = Parser(model_name=self.parsing_model_name)
+        if self.chunker is None:
+            self.chunker = Chunker(chunk_size=self.chunk_size)
+
         # Chunk all texts at once
         all_chunks = self.chunker.chunk(texts) # list[list[str]]
         # Flatten the chunks
@@ -174,6 +177,8 @@ class GPV:
         """
         if self.parser is None:
             self.parser = EntityParser(model_name=self.parsing_model_name)
+        if self.chunker is None:
+            self.chunker = Chunker(chunk_size=self.chunk_size)
 
         subject_value2avg_scores = {}
         subject_value2scores = {}
@@ -232,6 +237,8 @@ class GPV:
             self.embd_model = SentenceEmbedding(device=self.device)
         if self.parser is None:
             self.parser = EntityParser(model_name=self.parsing_model_name)
+        if self.chunker is None:
+            self.chunker = Chunker(chunk_size=self.chunk_size)
         
         subject_value2avg_scores = {}
         subject_value2scores = {}
@@ -259,7 +266,7 @@ class GPV:
             # Embed the chunks that contain the measurement subject
             embeddings = self.embd_model.get_embedding(measurement_chunks) # shape: (num_chunks, embedding_dim)
             
-            query_supports, query_opposes = gen_queries_for_perception_retrieval(values, measurement_subject)
+            query_supports, query_opposes = gen_queries_for_perception_retrieval(values, measurement_subject, model_name=self.parsing_model_name)
             queries = query_supports + query_opposes
             queries_embedding = self.embd_model.get_embedding(queries) # shape: (n_queries, embedding_dim)                
 
@@ -272,6 +279,9 @@ class GPV:
 
             # Measure the chunks for the given entity and value
             perceptions = self.parser.parse(similar_chunks, [[measurement_subject] for _ in similar_chunks])[measurement_subject]
+
+            if len(perceptions) == 0:
+                raise ValueError("No perceptions found for the measurement subject")
 
             print("Example chunk:", similar_chunks[-1])
             print("Example perceptions:", perceptions[-5:])
