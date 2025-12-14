@@ -1,4 +1,6 @@
 from tqdm import tqdm
+import asyncio
+from openai import AsyncOpenAI
 
 from .models import *
 
@@ -97,3 +99,62 @@ class LLMModel(object):
             for input_text in tqdm(input_texts):
                 responses.append(self.model.predict(input_text, **kwargs))
             return responses
+        
+class FlashModel():
+
+    def __init__(self, concurrency_limit: int=64, api_key=None):
+        self.base_url = "https://yunwu.zeabur.app/v1"
+        if api_key is None:
+            self.api_key = input("Please enter your Yunwu API key: ")
+        else:
+            self.api_key = api_key
+        self.concurrency_limit = concurrency_limit
+        self.semaphore = None
+        self.async_client = None
+
+    async def _lazy_init(self):
+        """Initializes async objects within the correct event loop."""
+        if self.semaphore is None:
+            self.semaphore = asyncio.Semaphore(self.concurrency_limit)
+        
+        if self.async_client is None:
+            self.async_client = AsyncOpenAI(
+                base_url=self.base_url,
+                api_key=self.api_key,
+                timeout=45,
+            )
+    
+    async def chat_completion_async(self, messages, model='qwen3-32b'):
+        await self._lazy_init()
+        async with self.semaphore:
+            response = await self.async_client.chat.completions.create(
+                model=model,
+                messages=messages
+            )
+            return response.choices[0].message.content
+
+    async def json_output_async(self, messages, model='qwen3-32b'):
+        await self._lazy_init()
+        async with self.semaphore:
+            response = await self.async_client.chat.completions.create(
+                model=model,
+                response_format={"type": "json_object"},
+                messages=messages
+            )
+            return response.choices[0].message.content
+
+    async def chat_completion_async_batch(self, messages_list, model='qwen3-32b'):
+        await self._lazy_init()
+        tasks = [
+            self.chat_completion_async(messages, model)
+            for messages in messages_list
+        ]
+        return await asyncio.gather(*tasks)
+
+    async def json_output_async_batch(self, messages_list, model='qwen3-32b'):
+        await self._lazy_init()
+        tasks = [
+            self.json_output_async(messages, model)
+            for messages in messages_list
+        ]
+        return await asyncio.gather(*tasks)
