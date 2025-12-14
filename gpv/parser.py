@@ -1,9 +1,11 @@
 import json
 import warnings
+import tqdm
+import asyncio
 try:
-    from .models import LLMModel
+    from .models import LLMModel, FlashModel
 except:
-    from models import LLMModel
+    from models import LLMModel, FlashModel
 
 
 SYSTEM_PROMPT = """[Background]
@@ -81,7 +83,68 @@ class Parser:
             perceptions_per_text.append(perceptions)
 
         return perceptions_per_text
+    
+class FlashParser:
+    def __init__(self, model_name="gpt-4o-mini", **kwargs):
+        self.flash_model = FlashModel()
+        self.model_name = model_name
 
+    async def parse(self, texts: list[str], batch_size=100) -> list[list[str]]:
+        """
+        Parse the text into perceptions
+        
+        Args:
+        - text: list[str]: The list of texts to be parsed
+        - batch_size: int: The batch size for the model
+        """
+        system_prompt = SYSTEM_PROMPT
+        user_prompts = [USER_PROMPT_TEMPLATE.format(text=text) for text in texts]
+        
+        # ---- Build messages ----
+        messages = []
+        for user_prompt in user_prompts:
+            cur_message = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ]
+            messages.append(cur_message)
+
+        # ---- slice into batches for batch api calling ----
+        batches = [
+            messages[i : i + 512]
+            for i in range(0, len(messages), 512)
+        ]
+
+        # ---- call API ----
+        responses = []
+        for batch in tqdm.tqdm(batches, total=len(batches), desc="FlashPaerser: Processing batches"):
+            for attempt in range(5):
+                try:
+                    response = await self.flash_model.json_output_async_batch(batch, model='gpt-4o-mini')
+                    break
+                except Exception as e:
+                    print(f"Attempt {attempt + 1}/5 failed during aspect extraction API call: {e}")
+                    if attempt < 4:
+                        print("Retrying...")
+                        await asyncio.sleep(1)
+                    else:
+                        print("All attempts failed, giving up on chunk...")
+                        response = [""] * len(batch)
+            responses.extend(response)
+
+        # ---- gather responses ----
+        perceptions_per_text = []
+        for response in responses:
+            try:
+                response_loaded = json.loads(response.strip("```json").strip("```"))
+                perceptions = response_loaded.get("perceptions", [])
+            except Exception as e:
+                print(e)
+                warnings.warn(f"Failed to parse the response: {response}") 
+                perceptions = []
+            perceptions_per_text.append(perceptions)
+
+        return perceptions_per_text
 
 class EntityParser:
     def __init__(self, model_name="gpt-4o-mini", **kwargs):

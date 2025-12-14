@@ -2,9 +2,10 @@ import os
 import json
 import numpy as np
 from datetime import datetime
+import asyncio
 
 from .chunker import Chunker
-from .parser import Parser, EntityParser
+from .parser import Parser, EntityParser, FlashParser
 from .valuellama import ValueLlama
 from .embd import SentenceEmbedding
 from .utils import get_score, gen_queries_for_perception_retrieval
@@ -17,11 +18,13 @@ class GPV:
                 measurement_model_name="Value4AI/ValueLlama-3-8B",
                 device='auto',
                 chunk_size=300,
+                use_flash=True,
                 ):
         self.device = device
         self.parsing_model_name = parsing_model_name
         self.measurement_model_name = measurement_model_name
         self.chunk_size = chunk_size
+        self.use_flash = use_flash
 
         self.parser = None
         self.measurement_system = None
@@ -142,7 +145,11 @@ class GPV:
 
     def parse_texts(self, texts: list[str]):
         if self.parser is None:
-            self.parser = Parser(model_name=self.parsing_model_name)
+            model_name = self.parsing_model_name
+            if self.use_flash:
+                self.parser = FlashParser(model_name=model_name)
+            else:
+                self.parser = Parser(model_name=model_name)
         if self.chunker is None:
             self.chunker = Chunker(chunk_size=self.chunk_size)
 
@@ -151,7 +158,10 @@ class GPV:
         # Flatten the chunks
         flat_chunks = [chunk for chunks in all_chunks for chunk in chunks]
         # Parse all chunks in one batch
-        all_perceptions = self.parser.parse(flat_chunks) # list[list[str]]; a list of perceptions for each chunk
+        if self.use_flash:
+            all_perceptions = asyncio.run(self.parser.parse(flat_chunks))
+        else:
+            all_perceptions = self.parser.parse(flat_chunks) # list[list[str]]; a list of perceptions for each chunk
         
         # Reorganize the results according to the original texts
         results_lst = []
