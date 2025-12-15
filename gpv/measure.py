@@ -101,7 +101,11 @@ class GPV:
         if self.chunker is None:
             self.chunker = Chunker(chunk_size=self.chunk_size)
         if self.parser is None:
-            self.parser = Parser(model_name=self.parsing_model_name)
+            model_name = self.parsing_model_name
+            if self.use_flash:
+                self.parser = FlashParser(model_name=model_name)
+            else:
+                self.parser = Parser(model_name=model_name)
 
         # Chunk all texts at once
         all_chunks = self.chunker.chunk(texts) # list[list[str]]
