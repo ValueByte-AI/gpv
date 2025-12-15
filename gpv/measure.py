@@ -101,14 +101,21 @@ class GPV:
         if self.chunker is None:
             self.chunker = Chunker(chunk_size=self.chunk_size)
         if self.parser is None:
-            self.parser = Parser(model_name=self.parsing_model_name)
+            model_name = self.parsing_model_name
+            if self.use_flash:
+                self.parser = FlashParser(model_name=model_name)
+            else:
+                self.parser = Parser(model_name=model_name)
 
         # Chunk all texts at once
         all_chunks = self.chunker.chunk(texts) # list[list[str]]
         # Flatten the chunks
         flat_chunks = [chunk for chunks in all_chunks for chunk in chunks] # list[str]
         # Parse all chunks in one batch
-        all_perceptions = self.parser.parse(flat_chunks) # list[list[str]]
+        if self.use_flash:
+            all_perceptions = asyncio.run(self.parser.parse(flat_chunks))
+        else:
+            all_perceptions = self.parser.parse(flat_chunks) # list[list[str]]; a list of perceptions for each chunk
         # Flatten perceptions
         flat_perceptions = [perception for perceptions in all_perceptions for perception in perceptions] # list[str]
         # Perform inference on all perceptions in one batch
