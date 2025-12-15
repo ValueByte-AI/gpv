@@ -112,7 +112,10 @@ class GPV:
         # Flatten the chunks
         flat_chunks = [chunk for chunks in all_chunks for chunk in chunks] # list[str]
         # Parse all chunks in one batch
-        all_perceptions = self.parser.parse(flat_chunks) # list[list[str]]
+        if self.use_flash:
+            all_perceptions = asyncio.run(self.parser.parse(flat_chunks))
+        else:
+            all_perceptions = self.parser.parse(flat_chunks) # list[list[str]]; a list of perceptions for each chunk
         # Flatten perceptions
         flat_perceptions = [perception for perceptions in all_perceptions for perception in perceptions] # list[str]
         # Perform inference on all perceptions in one batch
